@@ -773,6 +773,12 @@ html.combined #research { display: block; background: var(--cream); color: var(-
 .vbar-t b { font-family: var(--f-display); font-size: 18px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .vbar-more { justify-self: start; border: 0; background: none; padding: 4px 0 0; color: var(--yellow); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
 .vbar-go { background: var(--yellow) !important; color: var(--navy) !important; border: 0 !important; font-family: var(--f-display); font-weight: 700; font-size: 18px !important; text-transform: uppercase; padding: 14px 22px !important; border-radius: 12px; }
+.vbar-in { position: relative; }
+.vbar-x { position: absolute; top: -10px; right: -6px; width: 28px; height: 28px; padding: 0; border-radius: 50%; border: 2px solid var(--navy); background: var(--cream); color: var(--navy); font-size: 12px; font-weight: 700; line-height: 1; cursor: pointer; box-shadow: 0 2px 6px rgba(0,0,0,.3); }
+.vbar-x::before { content: ""; position: absolute; inset: -8px; }
+.vbar-x:hover { background: var(--yellow); }
+.vd-clear { border: 0; background: none; padding: 0; font: inherit; color: var(--yellow); text-decoration: underline; cursor: pointer; }
+.vb-clear { border: 0; background: none; padding: 6px 0; font: inherit; font-size: 13.5px; color: var(--muted); text-decoration: underline; cursor: pointer; grid-column: 1 / -1; justify-self: center; }
 .vbar-ok { font-family: var(--f-display); font-weight: 700; color: var(--pink); padding: 0 10px; white-space: nowrap; }
 html.vbar-on .pagefoot { padding-bottom: calc(100px + env(safe-area-inset-bottom, 0px)); }
 html.vbar-on .toast { bottom: calc(100px + env(safe-area-inset-bottom, 0px)); top: auto; }
@@ -1503,7 +1509,8 @@ function renderMarkers() {
     if (!m) { const el = document.createElement("div"); el.className = "pin"; m = markers[s.id] = new mapboxgl.Marker({ element: el, anchor: "center" }).setLngLat(centroid(s.ring)).addTo(map); }
     const el = m.getElement();
     el.innerHTML = ids.length ? ids.map((rid, i) => i === 0 ? `<span class="use" style="background:var(${CATS[RET[rid].cat].color})">${esc(RET[rid].name)}</span>` : `<span class="up">+ ${esc(RET[rid].name)}</span>`).join("")
-      : `<span class="ad">${esc(s.nm.replace(/ (St|Ln)$/, "").replace("Outparcel near 840 N Sebastian", "Outparcel"))}</span>`;
+      : "";
+    el.style.display = ids.length ? "" : "none";
   });
 }
 function zoomClass() { if (!map) return; const z = map.getZoom(); $("map").classList.toggle("zlow", z < 16.6); $("map").classList.toggle("zmin", z < 15.2); }
@@ -2110,10 +2117,11 @@ function renderVoteBox() {
     ${logoBox(r)}
     <div class="vb-text"><h3>${mine ? `${esc(r.name)} is your #1` : `Is ${esc(r.name)} the store you want most?`}</h3>
       <p>${x && x.rank ? `Ranked #${x.rank} of ${RETAILERS.length} with ${pct(x.pct)} of the vote. ` : `No votes for ${esc(r.name)} yet. `}${mine ? "You can change your vote anytime." : VOTE.mine ? `Your #1 right now is ${esc(RET[VOTE.mine].name)}. Voting here switches it.` : "One vote per device. You can change it later."}</p></div>
-    ${mine ? (COMBO ? `<button type="button" class="btn" id="vb-share">Share ${esc(r.name)}</button>` : `<a class="btn" href="#lb">See the ranking</a>`) : `<button type="button" class="btn primary" id="vb-go">Make ${esc(r.name)} my #1</button>`}
+    ${mine ? (COMBO ? `<button type="button" class="btn" id="vb-share">Share ${esc(r.name)}</button><button type="button" class="linkbtn vb-clear" id="vb-clear">Clear my vote</button>` : `<a class="btn" href="#lb">See the ranking</a>`) : `<button type="button" class="btn primary" id="vb-go">Make ${esc(r.name)} my #1</button>`}
   </div>`;
   if ($("vb-go")) $("vb-go").addEventListener("click", () => castVote(current));
   if ($("vb-share")) $("vb-share").addEventListener("click", () => shareStore(current));
+  if ($("vb-clear")) $("vb-clear").addEventListener("click", () => clearVote());
 }
 function renderHeroNote() {
   $("dw-mine").innerHTML = VOTE.mine ? `Your vote: <b>${esc(RET[VOTE.mine].name)}</b>` : "";
@@ -2196,8 +2204,26 @@ function renderGrid() {
 }
 function pickStore(id) {
   if (!RET[id]) return;
+  if (current === id) return clearPick();
   current = id; $("dw-name").textContent = RET[id].name;
   renderGrid(); renderVbar();
+}
+function clearPick() {
+  current = null; $("dw-name").textContent = "your #1";
+  renderGrid(); renderVbar();
+}
+function clearVote() {
+  const prev = VOTE.mine; if (!prev) return;
+  const t = VOTE.tally;
+  if (t && t.counts[prev]) { t.counts[prev]--; t.total = Math.max(0, t.total - 1); }
+  VOTE.mine = null; try { localStorage.removeItem("wrp-vote"); } catch (e) {}
+  if (!VOTE.demo) LOG.send({ kind: "vote", voter: VOTE.voter, retailer: "none", name: "(cleared)" });
+  track("vote_clear", { business: RET[prev].name });
+  toast(`Your vote for ${RET[prev].name} is cleared. Pick a store anytime to vote again.`);
+  current = null; $("dw-name").textContent = "your #1";
+  const go = () => { renderVoteUI(); const g = $("pick"); if (g) g.scrollIntoView({ behavior: "smooth", block: "start" }); };
+  if (overlays[overlays.length - 1] === "sheet") closeTop(go); else go();
+  if (!VOTE.demo) setTimeout(() => loadVotes(renderVoteUI), 4000);
 }
 let vbarInView = true;
 function renderVbar() {
@@ -2209,9 +2235,11 @@ function renderVbar() {
   const mine = VOTE.mine === current;
   el.innerHTML = `<div class="vbar-in">${logoBox(r)}<div class="vbar-t"><span class="vbar-k">${mine ? "Already your #1" : VOTE.mine ? "Switch your #1 to" : "Your pick"}</span><b>${esc(r.name)}</b>
     <button type="button" class="vbar-more" id="vbar-more"${on ? "" : " tabindex=\"-1\""}>What it would take ›</button></div>
-    ${mine ? `<span class="vbar-ok">✓ Voted</span>` : `<button type="button" class="btn primary vbar-go" id="vbar-go"${on ? "" : " tabindex=\"-1\""}>Vote</button>`}</div>`;
+    ${mine ? `<span class="vbar-ok">✓ Voted</span>` : `<button type="button" class="btn primary vbar-go" id="vbar-go"${on ? "" : " tabindex=\"-1\""}>Vote</button>`}
+    <button type="button" class="vbar-x" id="vbar-x" aria-label="Clear selection"${on ? "" : " tabindex=\"-1\""}>✕</button></div>`;
   $("vbar-more").addEventListener("click", () => openStore(current));
   if ($("vbar-go")) $("vbar-go").addEventListener("click", () => castVote(current));
+  $("vbar-x").addEventListener("click", clearPick);
 }
 function renderDone() {
   const el = $("vdone"), id = VOTE.mine;
@@ -2223,10 +2251,11 @@ function renderDone() {
       <p>${x && x.rank ? `Ranked #${x.rank} of ${RETAILERS.length} with ${pct(x.pct)} of the vote.` : "Your vote is in."} ${VOTE.state === "demo" ? "Example results in this preview." : `${R.total.toLocaleString()} vote${R.total === 1 ? "" : "s"} so far.`}</p></div></div>
     ${top.length ? `<ol class="vd-top">${top.map(y => `<li class="${y.r.id === id ? "me" : ""}"><span class="vd-r">#${y.rank}</span><span class="vd-n">${esc(y.r.name)}</span><span class="vd-bar"><i style="width:${y.n / max * 100}%"></i></span><b>${pct(y.pct)}</b></li>`).join("")}</ol>` : ""}
     <div class="vd-acts"><button type="button" class="btn primary" id="vd-share">Share ${esc(r.name)}</button><a class="btn" href="#stores">Full ranking</a><button type="button" class="btn" id="vd-more">What it would take</button></div>
-    <p class="vd-fine">Changed your mind? Pick another logo below and vote again. One vote per phone or computer.</p>
+    <p class="vd-fine">Changed your mind? Pick another logo below and vote again, or <button type="button" class="vd-clear" id="vd-clear">clear my vote</button>. One vote per phone or computer.</p>
   </div>`;
   $("vd-share").addEventListener("click", () => shareStore(id));
   $("vd-more").addEventListener("click", () => openStore(id));
+  $("vd-clear").addEventListener("click", () => clearVote());
 }
 function afterVote(id) {
   current = null;
